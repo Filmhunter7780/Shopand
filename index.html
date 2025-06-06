@@ -7,6 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Стили остаются без изменений */
         body {
             background-color: #f8f9fa;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -163,7 +164,7 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Пароль</label>
-                                <input type="password" class="form-control" id="regPassword" required>
+                                <input type="password" class="form-control" id="regPassword" minlength="6" required>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Ваш WhatsApp номер</label>
@@ -497,6 +498,10 @@
                         document.getElementById('shopInfo').classList.add('d-none');
                         document.getElementById('noShopInfo').classList.remove('d-none');
                     }
+                })
+                .catch(error => {
+                    console.error("Ошибка загрузки магазина:", error);
+                    alert(`Ошибка загрузки магазина: ${error.message}`);
                 });
         }
 
@@ -534,7 +539,10 @@
             const name = document.getElementById('shopName').value;
             const description = document.getElementById('shopDescription').value;
             
-            if (!currentUser) return;
+            if (!currentUser) {
+                alert('Ошибка авторизации. Пожалуйста, войдите снова.');
+                return;
+            }
             
             const shopData = {
                 name: name,
@@ -543,10 +551,11 @@
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
-            // Генерация уникального ID
-            const shopId = 'shop-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            // Определяем ID магазина
+            const shopId = currentShop ? currentShop.id : 'shop-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
             
-            db.collection('shops').doc(shopId).set(shopData)
+            // Используем merge для создания/обновления документа
+            db.collection('shops').doc(shopId).set(shopData, { merge: true })
                 .then(() => {
                     currentShop = {
                         id: shopId,
@@ -557,6 +566,7 @@
                     alert('Магазин успешно сохранен!');
                 })
                 .catch(error => {
+                    console.error("Ошибка сохранения магазина:", error);
                     alert(`Ошибка сохранения магазина: ${error.message}`);
                 });
         }
@@ -626,23 +636,21 @@
                 image: image,
                 price: price,
                 shopId: currentShop.id,
+                ownerId: currentUser.uid, // Ключевое исправление!
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
             let promise;
-            const productId = 'prod-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+            const productId = editingProductId || ('prod-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5));
             
-            if (editingProductId) {
-                promise = db.collection('products').doc(editingProductId).update(productData);
-            } else {
-                promise = db.collection('products').doc(productId).set(productData);
-            }
+            promise = db.collection('products').doc(productId).set(productData, { merge: true });
             
             promise.then(() => {
                 hideProductForm();
                 loadShopProducts();
                 alert('Товар успешно сохранен!');
             }).catch(error => {
+                console.error("Ошибка сохранения товара:", error);
                 alert(`Ошибка сохранения товара: ${error.message}`);
             });
         }
@@ -694,6 +702,10 @@
                         
                         productsContainer.innerHTML += productCard;
                     });
+                })
+                .catch(error => {
+                    console.error("Ошибка загрузки товаров:", error);
+                    productsContainer.innerHTML = '<div class="col-12"><p class="text-center text-danger">Ошибка загрузки товаров</p></div>';
                 });
         }
 
@@ -705,6 +717,13 @@
                 .then(doc => {
                     if (doc.exists) {
                         const product = doc.data();
+                        
+                        // Проверка владельца
+                        if (product.ownerId !== currentUser.uid) {
+                            alert('Этот товар принадлежит другому магазину!');
+                            return;
+                        }
+                        
                         document.getElementById('productFormTitle').textContent = 'Редактировать товар';
                         document.getElementById('productName').value = product.name;
                         document.getElementById('productDescription').value = product.description;
@@ -721,7 +740,7 @@
 
         // Показать магазин
         function showShop(shopId) {
-            // Не показывать магазин если пользователь авторизован
+            // Показываем магазин только для неавторизованных пользователей
             if (currentUser) {
                 showSection('dashboard');
                 return;
@@ -744,8 +763,7 @@
                                 if (userDoc.exists) {
                                     const userData = userDoc.data();
                                     const whatsappBtn = document.getElementById('shopWhatsapp');
-                                    const whatsappNumber = userData.whatsapp;
-                                    whatsappBtn.href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
+                                    whatsappBtn.href = `https://wa.me/${userData.whatsapp}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
                                 }
                             });
                         
@@ -766,6 +784,9 @@
                                         ...doc.data()
                                     };
                                     
+                                    // Экранирование специальных символов
+                                    const safeName = product.name.replace(/"/g, '&quot;').replace(/'/g, "\\'");
+                                    
                                     const productCard = `
                                         <div class="col-md-4 mb-4">
                                             <div class="card h-100">
@@ -776,7 +797,7 @@
                                                             <i class="fas fa-box-open fa-3x text-secondary"></i>
                                                         </div>`}
                                                     <button class="buy-btn" title="Купить" 
-                                                            onclick="buyProduct('${shop.owner}', '${product.name.replace(/'/g, "\\'")}')">
+                                                            onclick="buyProduct('${shop.owner}', '${safeName}')">
                                                         <i class="fab fa-whatsapp"></i>
                                                     </button>
                                                 </div>
@@ -811,7 +832,7 @@
                     if (doc.exists) {
                         const userData = doc.data();
                         const message = `Здравствуйте! Хочу купить товар "${productName}" из вашего магазина`;
-                        window.location.href = `https://wa.me/${userData.whatsapp}?text=${encodeURIComponent(message)}`;
+                        window.open(`https://wa.me/${userData.whatsapp}?text=${encodeURIComponent(message)}`, '_blank');
                     }
                 });
         }
