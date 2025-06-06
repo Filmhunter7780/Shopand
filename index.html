@@ -603,7 +603,7 @@
             document.getElementById('productFormContainer').classList.add('d-none');
         }
 
-        // Сохранить товар - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        // Сохранить товар
         function saveProduct(e) {
             e.preventDefault();
             
@@ -626,7 +626,6 @@
                 image: image,
                 price: price,
                 shopId: currentShop.id,
-                ownerId: currentUser.uid, // Добавляем ID владельца
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
@@ -644,7 +643,6 @@
                 loadShopProducts();
                 alert('Товар успешно сохранен!');
             }).catch(error => {
-                console.error("Ошибка сохранения:", error);
                 alert(`Ошибка сохранения товара: ${error.message}`);
             });
         }
@@ -656,10 +654,7 @@
             const productsContainer = document.getElementById('productsContainer');
             productsContainer.innerHTML = '';
             
-            // Фильтруем товары по ID магазина
-            db.collection('products')
-                .where('shopId', '==', currentShop.id)
-                .get()
+            db.collection('products').where('shopId', '==', currentShop.id).get()
                 .then(querySnapshot => {
                     if (querySnapshot.empty) {
                         productsContainer.innerHTML = '<div class="col-12"><p class="text-center text-muted">У вас пока нет товаров</p></div>';
@@ -710,13 +705,6 @@
                 .then(doc => {
                     if (doc.exists) {
                         const product = doc.data();
-                        
-                        // Проверяем, принадлежит ли товар текущему магазину
-                        if (product.shopId !== currentShop.id) {
-                            alert('Этот товар принадлежит другому магазину!');
-                            return;
-                        }
-                        
                         document.getElementById('productFormTitle').textContent = 'Редактировать товар';
                         document.getElementById('productName').value = product.name;
                         document.getElementById('productDescription').value = product.description;
@@ -756,7 +744,8 @@
                                 if (userDoc.exists) {
                                     const userData = userDoc.data();
                                     const whatsappBtn = document.getElementById('shopWhatsapp');
-                                    whatsappBtn.href = `https://wa.me/${userData.whatsapp}?text=Здравствуйте!%20Хочу%20купить%20товар%20из%20вашего%20магазина`;
+                                    const whatsappNumber = userData.whatsapp;
+                                    whatsappBtn.href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
                                 }
                             });
                         
@@ -764,10 +753,7 @@
                         const shopProducts = document.getElementById('shopProducts');
                         shopProducts.innerHTML = '';
                         
-                        // Фильтруем товары по ID магазина
-                        db.collection('products')
-                            .where('shopId', '==', shopId)
-                            .get()
+                        db.collection('products').where('shopId', '==', shopId).get()
                             .then(querySnapshot => {
                                 if (querySnapshot.empty) {
                                     shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
@@ -780,8 +766,6 @@
                                         ...doc.data()
                                     };
                                     
-                                    const productNameSafe = product.name.replace(/"/g, '\\"');
-                                    
                                     const productCard = `
                                         <div class="col-md-4 mb-4">
                                             <div class="card h-100">
@@ -792,7 +776,7 @@
                                                             <i class="fas fa-box-open fa-3x text-secondary"></i>
                                                         </div>`}
                                                     <button class="buy-btn" title="Купить" 
-                                                            onclick="buyProduct('${shop.owner}', '${productNameSafe}')">
+                                                            onclick="buyProduct('${shop.owner}', '${product.name.replace(/'/g, "\\'")}')">
                                                         <i class="fab fa-whatsapp"></i>
                                                     </button>
                                                 </div>
@@ -827,7 +811,7 @@
                     if (doc.exists) {
                         const userData = doc.data();
                         const message = `Здравствуйте! Хочу купить товар "${productName}" из вашего магазина`;
-                        window.open(`https://wa.me/${userData.whatsapp}?text=${encodeURIComponent(message)}`, '_blank');
+                        window.location.href = `https://wa.me/${userData.whatsapp}?text=${encodeURIComponent(message)}`;
                     }
                 });
         }
@@ -861,7 +845,6 @@
                 updateAuthUI();
                 
                 if (shopId && !currentUser) {
-                    // Показываем магазин только для неавторизованных пользователей
                     showShop(shopId);
                 } else if (currentUser) {
                     showSection('dashboard');
