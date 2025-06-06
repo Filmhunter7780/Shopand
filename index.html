@@ -87,6 +87,10 @@
             -webkit-appearance: none;
             margin: 0;
         }
+        .disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -549,22 +553,45 @@
                 return;
             }
             
-            const shopData = {
-                name: name,
-                description: description,
-                owner: currentUser.uid,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            
-            db.collection('shops').add(shopData)
-                .then((docRef) => {
-                    currentShop = {
-                        id: docRef.id,
-                        ...shopData
+            // Сначала получим данные пользователя, чтобы взять whatsapp
+            db.collection('users').doc(currentUser.uid).get()
+                .then(userDoc => {
+                    if (!userDoc.exists) {
+                        throw new Error('Данные пользователя не найдены');
+                    }
+                    
+                    const userData = userDoc.data();
+                    const whatsapp = userData.whatsapp;
+                    
+                    const shopData = {
+                        name: name,
+                        description: description,
+                        owner: currentUser.uid,
+                        ownerWhatsapp: whatsapp, // сохраняем номер в магазине
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
+                    
+                    if (currentShop) {
+                        // Если редактирование, то обновляем
+                        return db.collection('shops').doc(currentShop.id).update(shopData)
+                            .then(() => {
+                                currentShop = { ...currentShop, ...shopData };
+                            });
+                    } else {
+                        // Создаем новый магазин
+                        return db.collection('shops').add(shopData)
+                            .then((docRef) => {
+                                currentShop = {
+                                    id: docRef.id,
+                                    ...shopData
+                                };
+                            });
+                    }
+                })
+                .then(() => {
                     hideShopForm();
                     displayShopInfo();
-                    alert('Магазин успешно создан!');
+                    alert('Магазин успешно сохранен!');
                 })
                 .catch(error => {
                     console.error("Ошибка сохранения магазина:", error);
@@ -763,71 +790,64 @@
                         document.getElementById('shopTitle').textContent = shop.name;
                         document.getElementById('shopDesc').textContent = shop.description;
                         
-                        // Получаем WhatsApp номер владельца
-                        return db.collection('users').doc(shop.owner).get()
-                            .then(userDoc => {
-                                if (userDoc.exists) {
-                                    const userData = userDoc.data();
-                                    
-                                    // Проверяем и нормализуем номер
-                                    if (userData.whatsapp) {
-                                        const normalized = normalizePhone(userData.whatsapp);
-                                        const whatsappBtn = document.getElementById('shopWhatsapp');
-                                        whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
-                                        whatsappBtn.classList.remove('disabled');
-                                        whatsappBtn.onclick = null;
-                                        return normalized;
-                                    }
+                        // Используем сохраненный номер из магазина
+                        if (shop.ownerWhatsapp) {
+                            const normalized = normalizePhone(shop.ownerWhatsapp);
+                            const whatsappBtn = document.getElementById('shopWhatsapp');
+                            whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
+                            whatsappBtn.classList.remove('disabled');
+                            whatsappBtn.onclick = null;
+                        } else {
+                            // Если номера нет, делаем кнопку неактивной
+                            document.getElementById('shopWhatsapp').classList.add('disabled');
+                            document.getElementById('shopWhatsapp').onclick = (e) => e.preventDefault();
+                        }
+                        
+                        // Загружаем товары магазина
+                        const shopProducts = document.getElementById('shopProducts');
+                        shopProducts.innerHTML = '';
+                        
+                        return db.collection('products').where('shopId', '==', shopId).get()
+                            .then(querySnapshot => {
+                                if (querySnapshot.empty) {
+                                    shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
+                                    return;
                                 }
-                                return null;
-                            })
-                            .then(whatsappNumber => {
-                                // Загружаем товары магазина
-                                const shopProducts = document.getElementById('shopProducts');
-                                shopProducts.innerHTML = '';
                                 
-                                return db.collection('products').where('shopId', '==', shopId).get()
-                                    .then(querySnapshot => {
-                                        if (querySnapshot.empty) {
-                                            shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
-                                            return;
-                                        }
-                                        
-                                        querySnapshot.forEach(doc => {
-                                            const product = {
-                                                id: doc.id,
-                                                ...doc.data()
-                                            };
-                                            
-                                            const productCard = `
-                                                <div class="col-md-4 mb-4">
-                                                    <div class="card h-100">
-                                                        <div class="position-relative">
-                                                            ${product.image ? 
-                                                                `<img src="${product.image}" class="card-img-top product-image">` : 
-                                                                `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
-                                                                    <i class="fas fa-box-open fa-3x text-secondary"></i>
-                                                                </div>`}
-                                                            <button class="buy-btn" title="Купить" 
-                                                                    onclick="buyProduct('${shop.owner}', '${product.name.replace(/'/g, "\\'")}')">
-                                                                <i class="fab fa-whatsapp"></i>
-                                                            </button>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <h5 class="card-title">${product.name}</h5>
-                                                            <p class="card-text">${product.description}</p>
-                                                            <div class="d-flex justify-content-between">
-                                                                <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
-                                                                <span>Осталось: ${product.quantity} шт.</span>
-                                                            </div>
-                                                        </div>
+                                querySnapshot.forEach(doc => {
+                                    const product = {
+                                        id: doc.id,
+                                        ...doc.data()
+                                    };
+                                    
+                                    const productCard = `
+                                        <div class="col-md-4 mb-4">
+                                            <div class="card h-100">
+                                                <div class="position-relative">
+                                                    ${product.image ? 
+                                                        `<img src="${product.image}" class="card-img-top product-image">` : 
+                                                        `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
+                                                            <i class="fas fa-box-open fa-3x text-secondary"></i>
+                                                        </div>`}
+                                                    <button class="buy-btn" title="Купить" 
+                                                            onclick="buyProduct('${shop.id}', '${product.name.replace(/'/g, "\\'")}')">
+                                                        <i class="fab fa-whatsapp"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="card-body">
+                                                    <h5 class="card-title">${product.name}</h5>
+                                                    <p class="card-text">${product.description}</p>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
+                                                        <span>Осталось: ${product.quantity} шт.</span>
                                                     </div>
                                                 </div>
-                                            `;
-                                            
-                                            shopProducts.innerHTML += productCard;
-                                        });
-                                    });
+                                            </div>
+                                        </div>
+                                    `;
+                                    
+                                    shopProducts.innerHTML += productCard;
+                                });
                             });
                     } else {
                         alert('Магазин не найден');
@@ -845,21 +865,26 @@
         }
 
         // Купить товар
-        function buyProduct(ownerId, productName) {
-            db.collection('users').doc(ownerId).get()
-                .then(doc => {
-                    if (doc.exists) {
-                        const userData = doc.data();
-                        if (userData.whatsapp) {
-                            const normalized = normalizePhone(userData.whatsapp);
+        function buyProduct(shopId, productName) {
+            // Получаем магазин по ID, чтобы взять номер владельца
+            db.collection('shops').doc(shopId).get()
+                .then(shopDoc => {
+                    if (shopDoc.exists) {
+                        const shop = shopDoc.data();
+                        if (shop.ownerWhatsapp) {
+                            const normalized = normalizePhone(shop.ownerWhatsapp);
                             const message = `Здравствуйте! Хочу купить товар "${productName}" из вашего магазина`;
                             window.open(`https://wa.me/${normalized}?text=${encodeURIComponent(message)}`, '_blank');
                         } else {
                             alert('Владелец магазина не указал номер WhatsApp');
                         }
                     } else {
-                        alert('Владелец магазина не указал номер WhatsApp');
+                        alert('Магазин не найден');
                     }
+                })
+                .catch(error => {
+                    console.error("Ошибка при получении магазина:", error);
+                    alert('Ошибка при оформлении заказа');
                 });
         }
 
