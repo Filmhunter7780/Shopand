@@ -603,7 +603,7 @@
             document.getElementById('productFormContainer').classList.add('d-none');
         }
 
-        // Сохранить товар
+        // Сохранить товар - ИСПРАВЛЕННАЯ ВЕРСИЯ
         function saveProduct(e) {
             e.preventDefault();
             
@@ -614,8 +614,8 @@
             const price = document.getElementById('productPrice').value ? 
                          parseFloat(document.getElementById('productPrice').value) : 0;
             
-            if (!currentShop) {
-                alert('Сначала создайте магазин!');
+            if (!currentShop || !currentUser) {
+                alert('Ошибка авторизации. Пожалуйста, войдите снова.');
                 return;
             }
             
@@ -625,7 +625,8 @@
                 quantity: quantity,
                 image: image,
                 price: price,
-                shopId: currentShop.id, // Добавляем ID магазина к товару
+                shopId: currentShop.id,
+                ownerId: currentUser.uid, // Добавляем ID владельца
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
@@ -633,10 +634,8 @@
             const productId = 'prod-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
             
             if (editingProductId) {
-                // Редактирование существующего товара
                 promise = db.collection('products').doc(editingProductId).update(productData);
             } else {
-                // Добавление нового товара с явным указанием ID
                 promise = db.collection('products').doc(productId).set(productData);
             }
             
@@ -645,6 +644,7 @@
                 loadShopProducts();
                 alert('Товар успешно сохранен!');
             }).catch(error => {
+                console.error("Ошибка сохранения:", error);
                 alert(`Ошибка сохранения товара: ${error.message}`);
             });
         }
