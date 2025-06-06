@@ -377,7 +377,7 @@
         document.getElementById('shopForm').addEventListener('submit', saveShop);
         document.getElementById('productForm').addEventListener('submit', saveProduct);
 
-        // УЛУЧШЕННАЯ функция нормализации номера WhatsApp
+        // Улучшенная функция нормализации номера WhatsApp
         function normalizePhone(phone) {
             // Удаляем все нецифровые символы
             let cleaned = phone.replace(/\D/g, '');
@@ -764,86 +764,83 @@
                         document.getElementById('shopDesc').textContent = shop.description;
                         
                         // Получаем WhatsApp номер владельца
-                        db.collection('users').doc(shop.owner).get()
+                        return db.collection('users').doc(shop.owner).get()
                             .then(userDoc => {
-                                const whatsappBtn = document.getElementById('shopWhatsapp');
                                 if (userDoc.exists) {
                                     const userData = userDoc.data();
                                     
                                     // Проверяем и нормализуем номер
                                     if (userData.whatsapp) {
                                         const normalized = normalizePhone(userData.whatsapp);
+                                        const whatsappBtn = document.getElementById('shopWhatsapp');
                                         whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
                                         whatsappBtn.classList.remove('disabled');
                                         whatsappBtn.onclick = null;
-                                    } else {
-                                        whatsappBtn.classList.add('disabled');
-                                        whatsappBtn.onclick = (e) => {
-                                            e.preventDefault();
-                                            alert('Владелец магазина не указал номер WhatsApp');
-                                        };
+                                        return normalized;
                                     }
-                                } else {
-                                    whatsappBtn.classList.add('disabled');
-                                    whatsappBtn.onclick = (e) => {
-                                        e.preventDefault();
-                                        alert('Владелец магазина не указал номер WhatsApp');
-                                    };
                                 }
-                            });
-                        
-                        // Загружаем товары магазина
-                        const shopProducts = document.getElementById('shopProducts');
-                        shopProducts.innerHTML = '';
-                        
-                        db.collection('products').where('shopId', '==', shopId).get()
-                            .then(querySnapshot => {
-                                if (querySnapshot.empty) {
-                                    shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
-                                    return;
-                                }
+                                return null;
+                            })
+                            .then(whatsappNumber => {
+                                // Загружаем товары магазина
+                                const shopProducts = document.getElementById('shopProducts');
+                                shopProducts.innerHTML = '';
                                 
-                                querySnapshot.forEach(doc => {
-                                    const product = {
-                                        id: doc.id,
-                                        ...doc.data()
-                                    };
-                                    
-                                    const productCard = `
-                                        <div class="col-md-4 mb-4">
-                                            <div class="card h-100">
-                                                <div class="position-relative">
-                                                    ${product.image ? 
-                                                        `<img src="${product.image}" class="card-img-top product-image">` : 
-                                                        `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
-                                                            <i class="fas fa-box-open fa-3x text-secondary"></i>
-                                                        </div>`}
-                                                    <button class="buy-btn" title="Купить" 
-                                                            onclick="buyProduct('${shop.owner}', '${product.name.replace(/'/g, "\\'")}')">
-                                                        <i class="fab fa-whatsapp"></i>
-                                                    </button>
-                                                </div>
-                                                <div class="card-body">
-                                                    <h5 class="card-title">${product.name}</h5>
-                                                    <p class="card-text">${product.description}</p>
-                                                    <div class="d-flex justify-content-between">
-                                                        <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
-                                                        <span>Осталось: ${product.quantity} шт.</span>
+                                return db.collection('products').where('shopId', '==', shopId).get()
+                                    .then(querySnapshot => {
+                                        if (querySnapshot.empty) {
+                                            shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
+                                            return;
+                                        }
+                                        
+                                        querySnapshot.forEach(doc => {
+                                            const product = {
+                                                id: doc.id,
+                                                ...doc.data()
+                                            };
+                                            
+                                            const productCard = `
+                                                <div class="col-md-4 mb-4">
+                                                    <div class="card h-100">
+                                                        <div class="position-relative">
+                                                            ${product.image ? 
+                                                                `<img src="${product.image}" class="card-img-top product-image">` : 
+                                                                `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
+                                                                    <i class="fas fa-box-open fa-3x text-secondary"></i>
+                                                                </div>`}
+                                                            <button class="buy-btn" title="Купить" 
+                                                                    onclick="buyProduct('${shop.owner}', '${product.name.replace(/'/g, "\\'")}')">
+                                                                <i class="fab fa-whatsapp"></i>
+                                                            </button>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <h5 class="card-title">${product.name}</h5>
+                                                            <p class="card-text">${product.description}</p>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
+                                                                <span>Осталось: ${product.quantity} шт.</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                    
-                                    shopProducts.innerHTML += productCard;
-                                });
+                                            `;
+                                            
+                                            shopProducts.innerHTML += productCard;
+                                        });
+                                    });
                             });
-                        
-                        showSection('shop');
                     } else {
                         alert('Магазин не найден');
                         showSection('home');
                     }
+                })
+                .then(() => {
+                    showSection('shop');
+                })
+                .catch(error => {
+                    console.error("Ошибка загрузки магазина:", error);
+                    alert('Ошибка загрузки магазина');
+                    showSection('home');
                 });
         }
 
