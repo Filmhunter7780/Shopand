@@ -79,6 +79,14 @@
             color: #4361ee;
             margin-left: 8px;
         }
+        .price-input {
+            -moz-appearance: textfield;
+        }
+        .price-input::-webkit-outer-spin-button,
+        .price-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -159,7 +167,7 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Ваш WhatsApp номер</label>
-                                <input type="tel" class="form-control" id="regWhatsapp" placeholder="+79991234567" required>
+                                <input type="tel" class="form-control" id="regWhatsapp" placeholder="87085001538 или +77085001538" required>
                             </div>
                             <button type="submit" class="btn btn-primary w-100 py-2">Зарегистрироваться</button>
                             <div class="text-center mt-3">
@@ -271,8 +279,8 @@
                                 <input type="number" class="form-control" id="productQuantity" min="1" value="1" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Цена (₽)</label>
-                                <input type="number" class="form-control" id="productPrice" min="0" step="100">
+                                <label class="form-label">Цена (₸)</label>
+                                <input type="number" class="form-control price-input" id="productPrice" min="0" step="0.01">
                             </div>
                         </div>
                         <div class="mb-3">
@@ -307,7 +315,7 @@
     <!-- Подвал -->
     <footer class="bg-dark text-white py-4 mt-5">
         <div class="container text-center">
-            <p>&copy; 2023 Shopand - Платформа для мини-магазинов</p>
+            <p>&copy; 2025 Shopand - Платформа для мини-магазинов</p>
         </div>
     </footer>
 
@@ -368,6 +376,21 @@
         document.getElementById('shopForm').addEventListener('submit', saveShop);
         document.getElementById('productForm').addEventListener('submit', saveProduct);
 
+        // Нормализация номера WhatsApp
+        function normalizePhone(phone) {
+            // Удаляем все нецифровые символы
+            let cleaned = phone.replace(/\D/g, '');
+            
+            // Преобразуем номера в форматах 8... и +7...
+            if (cleaned.startsWith('8') && cleaned.length === 11) {
+                return '+7' + cleaned.substring(1);
+            }
+            if (cleaned.startsWith('7') && cleaned.length === 11) {
+                return '+' + cleaned;
+            }
+            return '+' + cleaned;
+        }
+
         // Перейти на главную страницу
         function goToHome(e) {
             e.preventDefault();
@@ -403,7 +426,7 @@
             e.preventDefault();
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
-            const whatsapp = document.getElementById('regWhatsapp').value;
+            const whatsapp = normalizePhone(document.getElementById('regWhatsapp').value);
             
             auth.createUserWithEmailAndPassword(email, password)
                 .then((userCredential) => {
@@ -588,7 +611,8 @@
             const description = document.getElementById('productDescription').value;
             const quantity = parseInt(document.getElementById('productQuantity').value);
             const image = document.getElementById('productImage').value;
-            const price = parseFloat(document.getElementById('productPrice').value) || 0;
+            const price = document.getElementById('productPrice').value ? 
+                         parseFloat(document.getElementById('productPrice').value) : 0;
             
             if (!currentShop) {
                 alert('Сначала создайте магазин!');
@@ -663,7 +687,7 @@
                                         <h5 class="card-title">${product.name}</h5>
                                         <p class="card-text">${product.description}</p>
                                         <div class="d-flex justify-content-between">
-                                            <span class="fw-bold">${product.price ? product.price + '₽' : 'Цена не указана'}</span>
+                                            <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
                                             <span>Осталось: ${product.quantity} шт.</span>
                                         </div>
                                     </div>
@@ -747,6 +771,8 @@
                                         ...doc.data()
                                     };
                                     
+                                    const productNameSafe = product.name.replace(/"/g, '\\"');
+                                    
                                     const productCard = `
                                         <div class="col-md-4 mb-4">
                                             <div class="card h-100">
@@ -756,7 +782,8 @@
                                                         `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
                                                             <i class="fas fa-box-open fa-3x text-secondary"></i>
                                                         </div>`}
-                                                    <button class="buy-btn" title="Купить" onclick="buyProduct('${shop.owner}')">
+                                                    <button class="buy-btn" title="Купить" 
+                                                            onclick="buyProduct('${shop.owner}', '${productNameSafe}')">
                                                         <i class="fab fa-whatsapp"></i>
                                                     </button>
                                                 </div>
@@ -764,7 +791,7 @@
                                                     <h5 class="card-title">${product.name}</h5>
                                                     <p class="card-text">${product.description}</p>
                                                     <div class="d-flex justify-content-between">
-                                                        <span class="fw-bold">${product.price ? product.price + '₽' : 'Цена не указана'}</span>
+                                                        <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
                                                         <span>Осталось: ${product.quantity} шт.</span>
                                                     </div>
                                                 </div>
@@ -785,12 +812,13 @@
         }
 
         // Купить товар (переход в WhatsApp)
-        function buyProduct(ownerId) {
+        function buyProduct(ownerId, productName) {
             db.collection('users').doc(ownerId).get()
                 .then(doc => {
                     if (doc.exists) {
                         const userData = doc.data();
-                        window.open(`https://wa.me/${userData.whatsapp}?text=Здравствуйте!%20Хочу%20купить%20товар%20из%20вашего%20магазина`, '_blank');
+                        const message = `Здравствуйте! Хочу купить товар "${productName}" из вашего магазина`;
+                        window.open(`https://wa.me/${userData.whatsapp}?text=${encodeURIComponent(message)}`, '_blank');
                     }
                 });
         }
