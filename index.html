@@ -168,6 +168,7 @@
                             <div class="mb-3">
                                 <label class="form-label">Ваш WhatsApp номер</label>
                                 <input type="tel" class="form-control" id="regWhatsapp" placeholder="87085001538 или +77085001538" required>
+                                <div class="form-text">Введите номер в формате 87085001538 или +77085001538</div>
                             </div>
                             <button type="submit" class="btn btn-primary w-100 py-2">Зарегистрироваться</button>
                             <div class="text-center mt-3">
@@ -428,7 +429,10 @@
             e.preventDefault();
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
-            const whatsapp = normalizePhone(document.getElementById('regWhatsapp').value);
+            const whatsapp = document.getElementById('regWhatsapp').value;
+            
+            // Нормализуем номер перед сохранением
+            const normalizedWhatsapp = normalizePhone(whatsapp);
             
             auth.createUserWithEmailAndPassword(email, password)
                 .then((userCredential) => {
@@ -436,7 +440,7 @@
                     
                     // Сохраняем WhatsApp номер пользователя
                     return db.collection('users').doc(currentUser.uid).set({
-                        whatsapp: whatsapp
+                        whatsapp: normalizedWhatsapp
                     });
                 })
                 .then(() => {
@@ -740,7 +744,7 @@
                 });
         }
 
-        // Показать магазин (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+        // Показать магазин
         function showShop(shopId) {
             // Показываем магазин только для неавторизованных пользователей
             if (currentUser) {
@@ -762,14 +766,16 @@
                         // Получаем WhatsApp номер владельца
                         db.collection('users').doc(shop.owner).get()
                             .then(userDoc => {
+                                const whatsappBtn = document.getElementById('shopWhatsapp');
                                 if (userDoc.exists) {
                                     const userData = userDoc.data();
-                                    const whatsappBtn = document.getElementById('shopWhatsapp');
                                     
                                     // Проверяем и нормализуем номер
                                     if (userData.whatsapp) {
                                         const normalized = normalizePhone(userData.whatsapp);
                                         whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
+                                        whatsappBtn.classList.remove('disabled');
+                                        whatsappBtn.onclick = null;
                                     } else {
                                         whatsappBtn.classList.add('disabled');
                                         whatsappBtn.onclick = (e) => {
@@ -777,6 +783,12 @@
                                             alert('Владелец магазина не указал номер WhatsApp');
                                         };
                                     }
+                                } else {
+                                    whatsappBtn.classList.add('disabled');
+                                    whatsappBtn.onclick = (e) => {
+                                        e.preventDefault();
+                                        alert('Владелец магазина не указал номер WhatsApp');
+                                    };
                                 }
                             });
                         
@@ -797,9 +809,6 @@
                                         ...doc.data()
                                     };
                                     
-                                    // Экранирование специальных символов
-                                    const safeName = product.name.replace(/"/g, '&quot;').replace(/'/g, "\\'");
-                                    
                                     const productCard = `
                                         <div class="col-md-4 mb-4">
                                             <div class="card h-100">
@@ -810,7 +819,7 @@
                                                             <i class="fas fa-box-open fa-3x text-secondary"></i>
                                                         </div>`}
                                                     <button class="buy-btn" title="Купить" 
-                                                            onclick="buyProduct('${shop.owner}', '${safeName}')">
+                                                            onclick="buyProduct('${shop.owner}', '${product.name.replace(/'/g, "\\'")}')">
                                                         <i class="fab fa-whatsapp"></i>
                                                     </button>
                                                 </div>
@@ -838,7 +847,7 @@
                 });
         }
 
-        // Купить товар (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+        // Купить товар
         function buyProduct(ownerId, productName) {
             db.collection('users').doc(ownerId).get()
                 .then(doc => {
@@ -851,6 +860,8 @@
                         } else {
                             alert('Владелец магазина не указал номер WhatsApp');
                         }
+                    } else {
+                        alert('Владелец магазина не указал номер WhatsApp');
                     }
                 });
         }
