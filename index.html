@@ -625,19 +625,19 @@
                 quantity: quantity,
                 image: image,
                 price: price,
+                shopId: currentShop.id, // Добавляем ID магазина к товару
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
             let promise;
+            const productId = 'prod-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
             
             if (editingProductId) {
                 // Редактирование существующего товара
-                promise = db.collection('shops').doc(currentShop.id)
-                    .collection('products').doc(editingProductId).update(productData);
+                promise = db.collection('products').doc(editingProductId).update(productData);
             } else {
-                // Добавление нового товара
-                promise = db.collection('shops').doc(currentShop.id)
-                    .collection('products').add(productData);
+                // Добавление нового товара с явным указанием ID
+                promise = db.collection('products').doc(productId).set(productData);
             }
             
             promise.then(() => {
@@ -656,8 +656,10 @@
             const productsContainer = document.getElementById('productsContainer');
             productsContainer.innerHTML = '';
             
-            db.collection('shops').doc(currentShop.id)
-                .collection('products').get()
+            // Фильтруем товары по ID магазина
+            db.collection('products')
+                .where('shopId', '==', currentShop.id)
+                .get()
                 .then(querySnapshot => {
                     if (querySnapshot.empty) {
                         productsContainer.innerHTML = '<div class="col-12"><p class="text-center text-muted">У вас пока нет товаров</p></div>';
@@ -704,11 +706,16 @@
         function editProduct(productId) {
             if (!currentShop) return;
             
-            db.collection('shops').doc(currentShop.id)
-                .collection('products').doc(productId).get()
+            db.collection('products').doc(productId).get()
                 .then(doc => {
                     if (doc.exists) {
                         const product = doc.data();
+                        
+                        // Проверяем, принадлежит ли товар текущему магазину
+                        if (product.shopId !== currentShop.id) {
+                            alert('Этот товар принадлежит другому магазину!');
+                            return;
+                        }
                         
                         document.getElementById('productFormTitle').textContent = 'Редактировать товар';
                         document.getElementById('productName').value = product.name;
@@ -757,8 +764,10 @@
                         const shopProducts = document.getElementById('shopProducts');
                         shopProducts.innerHTML = '';
                         
-                        db.collection('shops').doc(shopId)
-                            .collection('products').get()
+                        // Фильтруем товары по ID магазина
+                        db.collection('products')
+                            .where('shopId', '==', shopId)
+                            .get()
                             .then(querySnapshot => {
                                 if (querySnapshot.empty) {
                                     shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
