@@ -376,18 +376,20 @@
         document.getElementById('shopForm').addEventListener('submit', saveShop);
         document.getElementById('productForm').addEventListener('submit', saveProduct);
 
-        // Нормализация номера WhatsApp
+        // УЛУЧШЕННАЯ функция нормализации номера WhatsApp
         function normalizePhone(phone) {
             // Удаляем все нецифровые символы
             let cleaned = phone.replace(/\D/g, '');
             
-            // Преобразуем номера в форматах 8... и +7...
+            // Обработка казахстанских номеров:
+            // - Если номер начинается с '8' и имеет 11 цифр, заменяем '8' на '7'
+            // - Если номер начинается с '7' и имеет 11 цифр, оставляем как есть
+            // - Все остальные случаи оставляем без изменений
             if (cleaned.startsWith('8') && cleaned.length === 11) {
-                return '+7' + cleaned.substring(1);
+                cleaned = '7' + cleaned.substring(1);
             }
-            if (cleaned.startsWith('7') && cleaned.length === 11) {
-                return '+' + cleaned;
-            }
+            
+            // Всегда добавляем '+' в начале
             return '+' + cleaned;
         }
 
@@ -421,7 +423,7 @@
             }
         }
 
-        // Регистрация
+        // Регистрация с улучшенным форматированием телефона
         function register(e) {
             e.preventDefault();
             const email = document.getElementById('regEmail').value;
@@ -531,7 +533,7 @@
             }
         }
 
-        // Сохранить магазин (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+        // Сохранить магазин
         function saveShop(e) {
             e.preventDefault();
             
@@ -550,7 +552,6 @@
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
-            // Используем add() вместо set() для создания магазина
             db.collection('shops').add(shopData)
                 .then((docRef) => {
                     currentShop = {
@@ -609,7 +610,7 @@
             document.getElementById('productFormContainer').classList.add('d-none');
         }
 
-        // Сохранить товар (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+        // Сохранить товар
         function saveProduct(e) {
             e.preventDefault();
             
@@ -632,7 +633,7 @@
                 image: image,
                 price: price,
                 shopId: currentShop.id,
-                ownerId: currentUser.uid, // Ключевое исправление!
+                ownerId: currentUser.uid,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
@@ -739,7 +740,7 @@
                 });
         }
 
-        // Показать магазин
+        // Показать магазин (ИСПРАВЛЕННАЯ ВЕРСИЯ)
         function showShop(shopId) {
             // Показываем магазин только для неавторизованных пользователей
             if (currentUser) {
@@ -764,7 +765,18 @@
                                 if (userDoc.exists) {
                                     const userData = userDoc.data();
                                     const whatsappBtn = document.getElementById('shopWhatsapp');
-                                    whatsappBtn.href = `https://wa.me/${userData.whatsapp}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
+                                    
+                                    // Проверяем и нормализуем номер
+                                    if (userData.whatsapp) {
+                                        const normalized = normalizePhone(userData.whatsapp);
+                                        whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
+                                    } else {
+                                        whatsappBtn.classList.add('disabled');
+                                        whatsappBtn.onclick = (e) => {
+                                            e.preventDefault();
+                                            alert('Владелец магазина не указал номер WhatsApp');
+                                        };
+                                    }
                                 }
                             });
                         
@@ -826,14 +838,19 @@
                 });
         }
 
-        // Купить товар (переход в WhatsApp)
+        // Купить товар (ИСПРАВЛЕННАЯ ВЕРСИЯ)
         function buyProduct(ownerId, productName) {
             db.collection('users').doc(ownerId).get()
                 .then(doc => {
                     if (doc.exists) {
                         const userData = doc.data();
-                        const message = `Здравствуйте! Хочу купить товар "${productName}" из вашего магазина`;
-                        window.open(`https://wa.me/${userData.whatsapp}?text=${encodeURIComponent(message)}`, '_blank');
+                        if (userData.whatsapp) {
+                            const normalized = normalizePhone(userData.whatsapp);
+                            const message = `Здравствуйте! Хочу купить товар "${productName}" из вашего магазина`;
+                            window.open(`https://wa.me/${normalized}?text=${encodeURIComponent(message)}`, '_blank');
+                        } else {
+                            alert('Владелец магазина не указал номер WhatsApp');
+                        }
                     }
                 });
         }
