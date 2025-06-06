@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shopand - Ваш мини-магазин</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
             background-color: #f8f9fa;
@@ -73,13 +74,18 @@
             color: white;
             border: none;
         }
+        .copy-btn {
+            cursor: pointer;
+            color: #4361ee;
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
     <!-- Навигация -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
-            <a class="navbar-brand logo" href="#">Shopand</a>
+            <a class="navbar-brand logo" href="#" id="homeLink">Shopand</a>
             <div class="d-flex">
                 <button id="loginBtn" class="btn btn-outline-primary me-2 d-none">Войти</button>
                 <button id="logoutBtn" class="btn btn-outline-danger me-2 d-none">Выйти</button>
@@ -205,6 +211,7 @@
                         <p id="shopDescriptionDisplay"></p>
                         <p><strong>URL вашего магазина:</strong> 
                             <a href="#" id="shopUrl" target="_blank"></a>
+                            <i class="fas fa-copy copy-btn" title="Скопировать ссылку" onclick="copyShopUrl()"></i>
                         </p>
                         <button id="editShopBtn" class="btn btn-outline-primary">Редактировать магазин</button>
                     </div>
@@ -300,7 +307,7 @@
     <!-- Подвал -->
     <footer class="bg-dark text-white py-4 mt-5">
         <div class="container text-center">
-            <p>&copy; 2025 Shopand - Платформа для мини-магазинов</p>
+            <p>&copy; 2023 Shopand - Платформа для мини-магазинов</p>
         </div>
     </footer>
 
@@ -308,10 +315,9 @@
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-firestore-compat.js"></script>
-    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
     
     <script>
-        // Ваша конфигурация Firebase
+        // Конфигурация Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyAPcx4HvmvQXLtlGqHjZIJzvET8AgBjTRA",
             authDomain: "shopand-77667.firebaseapp.com",
@@ -354,12 +360,22 @@
         document.getElementById('cancelShopBtn').addEventListener('click', hideShopForm);
         document.getElementById('addProductBtn').addEventListener('click', showProductForm);
         document.getElementById('cancelProductBtn').addEventListener('click', hideProductForm);
+        document.getElementById('homeLink').addEventListener('click', goToHome);
 
         // Формы
         document.getElementById('registerForm').addEventListener('submit', register);
         document.getElementById('loginForm').addEventListener('submit', login);
         document.getElementById('shopForm').addEventListener('submit', saveShop);
         document.getElementById('productForm').addEventListener('submit', saveProduct);
+
+        // Перейти на главную страницу
+        function goToHome(e) {
+            e.preventDefault();
+            const cleanUrl = window.location.href.split('?')[0];
+            window.history.replaceState({}, document.title, cleanUrl);
+            currentShop = null;
+            showSection('home');
+        }
 
         // Показать секцию
         function showSection(sectionName) {
@@ -370,6 +386,15 @@
             
             if (sectionName === 'dashboard' && currentUser) {
                 loadUserShop();
+                
+                // Очистить URL при переходе в кабинет
+                const cleanUrl = window.location.href.split('?')[0];
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+            
+            // Очистить магазин при переходе на главную
+            if (sectionName === 'home') {
+                currentShop = null;
             }
         }
 
@@ -420,6 +445,11 @@
             auth.signOut().then(() => {
                 currentUser = null;
                 currentShop = null;
+                
+                // Очистить параметры URL
+                const cleanUrl = window.location.href.split('?')[0];
+                window.history.replaceState({}, document.title, cleanUrl);
+                
                 showSection('home');
                 updateAuthUI();
             });
@@ -490,8 +520,8 @@
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             
-            // Генерация уникального ID для магазина
-            const shopId = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            // Генерация уникального ID
+            const shopId = 'shop-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
             
             db.collection('shops').doc(shopId).set(shopData)
                 .then(() => {
@@ -514,11 +544,21 @@
             
             document.getElementById('shopNameDisplay').textContent = currentShop.name;
             document.getElementById('shopDescriptionDisplay').textContent = currentShop.description;
-            document.getElementById('shopUrl').textContent = window.location.href.split('?')[0] + `?shop=${currentShop.id}`;
-            document.getElementById('shopUrl').href = `?shop=${currentShop.id}`;
+            
+            const shopUrl = window.location.href.split('?')[0] + `?shop=${currentShop.id}`;
+            document.getElementById('shopUrl').textContent = shopUrl;
+            document.getElementById('shopUrl').href = shopUrl;
             
             document.getElementById('shopInfo').classList.remove('d-none');
             document.getElementById('noShopInfo').classList.add('d-none');
+        }
+
+        // Копировать ссылку магазина
+        function copyShopUrl() {
+            const url = document.getElementById('shopUrl').href;
+            navigator.clipboard.writeText(url)
+                .then(() => alert('Ссылка скопирована в буфер обмена!'))
+                .catch(err => console.error('Ошибка копирования: ', err));
         }
 
         // Показать форму товара
@@ -662,6 +702,12 @@
 
         // Показать магазин
         function showShop(shopId) {
+            // Не показывать магазин если пользователь авторизован
+            if (currentUser) {
+                showSection('dashboard');
+                return;
+            }
+            
             db.collection('shops').doc(shopId).get()
                 .then(doc => {
                     if (doc.exists) {
@@ -777,7 +823,8 @@
                 currentUser = user;
                 updateAuthUI();
                 
-                if (shopId) {
+                if (shopId && !currentUser) {
+                    // Показываем магазин только для неавторизованных пользователей
                     showShop(shopId);
                 } else if (currentUser) {
                     showSection('dashboard');
@@ -793,6 +840,7 @@
         // Экспорт функций в глобальную область видимости
         window.buyProduct = buyProduct;
         window.editProduct = editProduct;
+        window.copyShopUrl = copyShopUrl;
     </script>
 </body>
 </html>
