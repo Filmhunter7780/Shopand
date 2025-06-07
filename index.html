@@ -91,13 +91,38 @@
             opacity: 0.65;
             cursor: not-allowed;
         }
+        .url-preview {
+            background-color: #e9ecef;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .slug-input-group {
+            position: relative;
+        }
+        .slug-check {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .available {
+            color: #28a745;
+        }
+        .taken {
+            color: #dc3545;
+        }
+        .slug-generate {
+            cursor: pointer;
+            color: #4361ee;
+        }
     </style>
 </head>
 <body>
     <!-- Навигация -->
     <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
         <div class="container">
-            <a class="navbar-brand logo" href="#" id="homeLink">Shopand</a>
+            <a class="navbar-brand logo" href="#/" id="homeLink">Shopand</a>
             <div class="d-flex">
                 <button id="loginBtn" class="btn btn-outline-primary me-2 d-none">Войти</button>
                 <button id="logoutBtn" class="btn btn-outline-danger me-2 d-none">Выйти</button>
@@ -176,7 +201,7 @@
                             </div>
                             <button type="submit" class="btn btn-primary w-100 py-2">Зарегистрироваться</button>
                             <div class="text-center mt-3">
-                                <a href="#" id="toLogin">Уже есть аккаунт? Войти</a>
+                                <a href="#/login">Уже есть аккаунт? Войти</a>
                             </div>
                         </form>
                     </div>
@@ -203,7 +228,7 @@
                             </div>
                             <button type="submit" class="btn btn-primary w-100 py-2">Войти</button>
                             <div class="text-center mt-3">
-                                <a href="#" id="toRegister">Нет аккаунта? Зарегистрироваться</a>
+                                <a href="#/register">Нет аккаунта? Зарегистрироваться</a>
                             </div>
                         </form>
                     </div>
@@ -258,6 +283,23 @@
                         <div class="mb-3">
                             <label class="form-label">Описание магазина</label>
                             <textarea class="form-control" id="shopDescription" rows="3" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Ваш URL магазина</label>
+                            <div class="input-group slug-input-group">
+                                <div class="input-group-text url-preview" id="urlPreview">shopand.ru/</div>
+                                <input type="text" class="form-control" id="shopSlug" required 
+                                       placeholder="my-shop" pattern="[a-zA-Z0-9\-]{3,20}" 
+                                       title="Только латинские буквы, цифры и дефисы (3-20 символов)">
+                                <span id="slugStatus" class="slug-check"></span>
+                            </div>
+                            <div class="form-text">
+                                <span id="slugMessage">Введите уникальный URL для вашего магазина</span>
+                                <br>
+                                <span class="slug-generate" onclick="generateRandomSlug()">
+                                    <i class="fas fa-dice"></i> Сгенерировать случайный URL
+                                </span>
+                            </div>
                         </div>
                         <button type="submit" class="btn btn-primary">Сохранить</button>
                         <button type="button" id="cancelShopBtn" class="btn btn-outline-secondary ms-2">Отмена</button>
@@ -350,6 +392,7 @@
         let currentShop = null;
         let currentProducts = [];
         let editingProductId = null;
+        let slugCheckTimeout = null;
 
         // DOM элементы
         const sections = {
@@ -361,94 +404,106 @@
         };
         
         // Кнопки навигации
-        document.getElementById('createShopBtn').addEventListener('click', () => showSection('register'));
-        document.getElementById('loginHomeBtn').addEventListener('click', () => showSection('login'));
-        document.getElementById('toLogin').addEventListener('click', () => showSection('login'));
-        document.getElementById('toRegister').addEventListener('click', () => showSection('register'));
-        document.getElementById('loginBtn').addEventListener('click', () => showSection('login'));
-        document.getElementById('dashboardBtn').addEventListener('click', () => showSection('dashboard'));
-        document.getElementById('logoutBtn').addEventListener('click', logout);
+        document.getElementById('createShopBtn').addEventListener('click', () => location.hash = '#/register');
+        document.getElementById('loginHomeBtn').addEventListener('click', () => location.hash = '#/login');
         document.getElementById('createShopFormBtn').addEventListener('click', showShopForm);
         document.getElementById('editShopBtn').addEventListener('click', showShopForm);
         document.getElementById('cancelShopBtn').addEventListener('click', hideShopForm);
         document.getElementById('addProductBtn').addEventListener('click', showProductForm);
         document.getElementById('cancelProductBtn').addEventListener('click', hideProductForm);
-        document.getElementById('homeLink').addEventListener('click', goToHome);
-
+        document.getElementById('homeLink').addEventListener('click', () => location.hash = '#/');
+        
         // Формы
         document.getElementById('registerForm').addEventListener('submit', register);
         document.getElementById('loginForm').addEventListener('submit', login);
         document.getElementById('shopForm').addEventListener('submit', saveShop);
         document.getElementById('productForm').addEventListener('submit', saveProduct);
+        
+        // Слушатель изменения slug
+        document.getElementById('shopSlug').addEventListener('input', checkSlugAvailability);
 
         // Улучшенная функция нормализации номера WhatsApp
         function normalizePhone(phone) {
-            // Удаляем все нецифровые символы
             let cleaned = phone.replace(/\D/g, '');
-            
-            // Обработка казахстанских номеров:
-            // - Если номер начинается с '8' и имеет 11 цифр, заменяем '8' на '7'
-            // - Если номер начинается с '7' и имеет 11 цифр, оставляем как есть
-            // - Все остальные случаи оставляем без изменений
             if (cleaned.startsWith('8') && cleaned.length === 11) {
                 cleaned = '7' + cleaned.substring(1);
             }
-            
-            // Всегда добавляем '+' в начале
             return '+' + cleaned;
         }
 
-        // Перейти на главную страницу
-        function goToHome(e) {
-            e.preventDefault();
-            const cleanUrl = window.location.href.split('?')[0];
-            window.history.replaceState({}, document.title, cleanUrl);
-            currentShop = null;
-            showSection('home');
+        // Генерация случайного slug
+        function generateRandomSlug() {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let slug = '';
+            for (let i = 0; i < 8; i++) {
+                slug += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            document.getElementById('shopSlug').value = slug;
+            checkSlugAvailability();
         }
 
-        // Показать секцию
-        function showSection(sectionName) {
-            Object.values(sections).forEach(section => {
-                section.classList.remove('active');
-            });
-            sections[sectionName].classList.add('active');
+        // Проверка доступности slug
+        function checkSlugAvailability() {
+            const slugInput = document.getElementById('shopSlug');
+            const slug = slugInput.value.trim();
+            const statusElement = document.getElementById('slugStatus');
+            const messageElement = document.getElementById('slugMessage');
             
-            if (sectionName === 'dashboard' && currentUser) {
-                loadUserShop();
-                
-                // Очистить URL при переходе в кабинет
-                const cleanUrl = window.location.href.split('?')[0];
-                window.history.replaceState({}, document.title, cleanUrl);
+            // Проверка на соответствие шаблону
+            const regex = /^[a-zA-Z0-9\-]{3,20}$/;
+            if (!regex.test(slug)) {
+                statusElement.innerHTML = '<i class="fas fa-times"></i>';
+                statusElement.className = 'slug-check taken';
+                messageElement.textContent = 'Только латинские буквы, цифры и дефисы (3-20 символов)';
+                messageElement.className = 'text-danger';
+                return;
             }
             
-            // Очистить магазин при переходе на главную
-            if (sectionName === 'home') {
-                currentShop = null;
-            }
+            // Проверка на занятость
+            clearTimeout(slugCheckTimeout);
+            slugCheckTimeout = setTimeout(() => {
+                db.collection('shops').where('slug', '==', slug).get()
+                    .then(querySnapshot => {
+                        if (querySnapshot.empty) {
+                            statusElement.innerHTML = '<i class="fas fa-check"></i>';
+                            statusElement.className = 'slug-check available';
+                            messageElement.textContent = 'Этот URL доступен!';
+                            messageElement.className = 'text-success';
+                        } else {
+                            statusElement.innerHTML = '<i class="fas fa-times"></i>';
+                            statusElement.className = 'slug-check taken';
+                            messageElement.textContent = 'Этот URL уже занят';
+                            messageElement.className = 'text-danger';
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Ошибка проверки slug:", error);
+                        statusElement.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+                        statusElement.className = 'slug-check taken';
+                        messageElement.textContent = 'Ошибка проверки доступности';
+                        messageElement.className = 'text-danger';
+                    });
+            }, 500);
         }
 
-        // Регистрация с улучшенным форматированием телефона
+        // Регистрация
         function register(e) {
             e.preventDefault();
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
             const whatsapp = document.getElementById('regWhatsapp').value;
             
-            // Нормализуем номер перед сохранением
             const normalizedWhatsapp = normalizePhone(whatsapp);
             
             auth.createUserWithEmailAndPassword(email, password)
                 .then((userCredential) => {
                     currentUser = userCredential.user;
-                    
-                    // Сохраняем WhatsApp номер пользователя
                     return db.collection('users').doc(currentUser.uid).set({
                         whatsapp: normalizedWhatsapp
                     });
                 })
                 .then(() => {
-                    showSection('dashboard');
+                    location.hash = '#/dashboard';
                     updateAuthUI();
                 })
                 .catch((error) => {
@@ -465,7 +520,7 @@
             auth.signInWithEmailAndPassword(email, password)
                 .then((userCredential) => {
                     currentUser = userCredential.user;
-                    showSection('dashboard');
+                    location.hash = '#/dashboard';
                     updateAuthUI();
                 })
                 .catch((error) => {
@@ -478,12 +533,7 @@
             auth.signOut().then(() => {
                 currentUser = null;
                 currentShop = null;
-                
-                // Очистить параметры URL
-                const cleanUrl = window.location.href.split('?')[0];
-                window.history.replaceState({}, document.title, cleanUrl);
-                
-                showSection('home');
+                location.hash = '#/';
                 updateAuthUI();
             });
         }
@@ -524,10 +574,16 @@
                 document.getElementById('shopFormTitle').textContent = 'Редактировать магазин';
                 document.getElementById('shopName').value = currentShop.name;
                 document.getElementById('shopDescription').value = currentShop.description;
+                document.getElementById('shopSlug').value = currentShop.slug;
+                checkSlugAvailability();
             } else {
                 document.getElementById('shopFormTitle').textContent = 'Создать магазин';
                 document.getElementById('shopName').value = '';
                 document.getElementById('shopDescription').value = '';
+                document.getElementById('shopSlug').value = '';
+                document.getElementById('slugStatus').innerHTML = '';
+                document.getElementById('slugMessage').textContent = 'Введите уникальный URL для вашего магазина';
+                document.getElementById('slugMessage').className = '';
             }
         }
 
@@ -547,13 +603,28 @@
             
             const name = document.getElementById('shopName').value;
             const description = document.getElementById('shopDescription').value;
+            const slug = document.getElementById('shopSlug').value.trim().toLowerCase();
+            
+            // Проверка формата slug
+            const regex = /^[a-zA-Z0-9\-]{3,20}$/;
+            if (!regex.test(slug)) {
+                alert('Некорректный URL. Используйте только латинские буквы, цифры и дефисы (3-20 символов).');
+                return;
+            }
+            
+            // Проверка доступности slug
+            const statusElement = document.getElementById('slugStatus');
+            if (statusElement.classList.contains('taken') || 
+                !statusElement.classList.contains('available')) {
+                alert('Пожалуйста, выберите доступный URL для вашего магазина');
+                return;
+            }
             
             if (!currentUser) {
                 alert('Ошибка авторизации. Пожалуйста, войдите снова.');
                 return;
             }
             
-            // Сначала получим данные пользователя, чтобы взять whatsapp
             db.collection('users').doc(currentUser.uid).get()
                 .then(userDoc => {
                     if (!userDoc.exists) {
@@ -566,27 +637,39 @@
                     const shopData = {
                         name: name,
                         description: description,
+                        slug: slug,
                         owner: currentUser.uid,
-                        ownerWhatsapp: whatsapp, // сохраняем номер в магазине
+                        ownerWhatsapp: whatsapp,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     };
                     
-                    if (currentShop) {
-                        // Если редактирование, то обновляем
-                        return db.collection('shops').doc(currentShop.id).update(shopData)
-                            .then(() => {
-                                currentShop = { ...currentShop, ...shopData };
-                            });
-                    } else {
-                        // Создаем новый магазин
-                        return db.collection('shops').add(shopData)
-                            .then((docRef) => {
-                                currentShop = {
-                                    id: docRef.id,
-                                    ...shopData
-                                };
-                            });
-                    }
+                    // Проверка уникальности slug
+                    return db.collection('shops').where('slug', '==', slug).get()
+                        .then(slugQuery => {
+                            if (!slugQuery.empty) {
+                                // Пропускаем текущий магазин при редактировании
+                                if (currentShop && slugQuery.docs.some(doc => doc.id === currentShop.id)) {
+                                    return;
+                                }
+                                throw new Error('Этот URL уже занят другим магазином');
+                            }
+                        })
+                        .then(() => {
+                            if (currentShop) {
+                                return db.collection('shops').doc(currentShop.id).update(shopData)
+                                    .then(() => {
+                                        currentShop = { ...currentShop, ...shopData };
+                                    });
+                            } else {
+                                return db.collection('shops').add(shopData)
+                                    .then((docRef) => {
+                                        currentShop = {
+                                            id: docRef.id,
+                                            ...shopData
+                                        };
+                                    });
+                            }
+                        });
                 })
                 .then(() => {
                     hideShopForm();
@@ -606,7 +689,7 @@
             document.getElementById('shopNameDisplay').textContent = currentShop.name;
             document.getElementById('shopDescriptionDisplay').textContent = currentShop.description;
             
-            const shopUrl = window.location.href.split('?')[0] + `?shop=${currentShop.id}`;
+            const shopUrl = `${window.location.origin}/#/shop/${currentShop.slug}`;
             document.getElementById('shopUrl').textContent = shopUrl;
             document.getElementById('shopUrl').href = shopUrl;
             
@@ -628,7 +711,6 @@
             document.getElementById('productFormTitle').textContent = 'Добавить товар';
             editingProductId = null;
             
-            // Очистить форму
             document.getElementById('productName').value = '';
             document.getElementById('productDescription').value = '';
             document.getElementById('productQuantity').value = '1';
@@ -671,10 +753,8 @@
             let promise;
             
             if (editingProductId) {
-                // Обновление существующего товара
                 promise = db.collection('products').doc(editingProductId).update(productData);
             } else {
-                // Создание нового товара
                 promise = db.collection('products').add(productData);
             }
             
@@ -751,7 +831,6 @@
                     if (doc.exists) {
                         const product = doc.data();
                         
-                        // Проверка владельца
                         if (product.ownerId !== currentUser.uid) {
                             alert('Этот товар принадлежит другому магазину!');
                             return;
@@ -771,87 +850,81 @@
                 });
         }
 
-        // Показать магазин
-        function showShop(shopId) {
-            // Показываем магазин только для неавторизованных пользователей
-            if (currentUser) {
-                showSection('dashboard');
-                return;
-            }
-            
-            db.collection('shops').doc(shopId).get()
-                .then(doc => {
-                    if (doc.exists) {
-                        const shop = {
-                            id: doc.id,
-                            ...doc.data()
-                        };
-                        
-                        document.getElementById('shopTitle').textContent = shop.name;
-                        document.getElementById('shopDesc').textContent = shop.description;
-                        
-                        // Используем сохраненный номер из магазина
-                        if (shop.ownerWhatsapp) {
-                            const normalized = normalizePhone(shop.ownerWhatsapp);
-                            const whatsappBtn = document.getElementById('shopWhatsapp');
-                            whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
-                            whatsappBtn.classList.remove('disabled');
-                            whatsappBtn.onclick = null;
-                        } else {
-                            // Если номера нет, делаем кнопку неактивной
-                            document.getElementById('shopWhatsapp').classList.add('disabled');
-                            document.getElementById('shopWhatsapp').onclick = (e) => e.preventDefault();
-                        }
-                        
-                        // Загружаем товары магазина
-                        const shopProducts = document.getElementById('shopProducts');
-                        shopProducts.innerHTML = '';
-                        
-                        return db.collection('products').where('shopId', '==', shopId).get()
-                            .then(querySnapshot => {
-                                if (querySnapshot.empty) {
-                                    shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
-                                    return;
-                                }
-                                
-                                querySnapshot.forEach(doc => {
-                                    const product = {
-                                        id: doc.id,
-                                        ...doc.data()
-                                    };
+        // Загрузить магазин по slug
+        function loadShopBySlug(slug) {
+            db.collection('shops').where('slug', '==', slug).get()
+                .then(querySnapshot => {
+                    if (!querySnapshot.empty) {
+                        querySnapshot.forEach(doc => {
+                            const shop = {
+                                id: doc.id,
+                                ...doc.data()
+                            };
+                            
+                            document.getElementById('shopTitle').textContent = shop.name;
+                            document.getElementById('shopDesc').textContent = shop.description;
+                            
+                            if (shop.ownerWhatsapp) {
+                                const normalized = normalizePhone(shop.ownerWhatsapp);
+                                const whatsappBtn = document.getElementById('shopWhatsapp');
+                                whatsappBtn.href = `https://wa.me/${normalized}?text=${encodeURIComponent('Здравствуйте! Хочу купить товар из вашего магазина')}`;
+                                whatsappBtn.classList.remove('disabled');
+                                whatsappBtn.onclick = null;
+                            } else {
+                                document.getElementById('shopWhatsapp').classList.add('disabled');
+                                document.getElementById('shopWhatsapp').onclick = (e) => e.preventDefault();
+                            }
+                            
+                            // Загружаем товары магазина
+                            const shopProducts = document.getElementById('shopProducts');
+                            shopProducts.innerHTML = '';
+                            
+                            return db.collection('products').where('shopId', '==', shop.id).get()
+                                .then(querySnapshot => {
+                                    if (querySnapshot.empty) {
+                                        shopProducts.innerHTML = '<div class="col-12"><p class="text-center">В магазине пока нет товаров</p></div>';
+                                        return;
+                                    }
                                     
-                                    const productCard = `
-                                        <div class="col-md-4 mb-4">
-                                            <div class="card h-100">
-                                                <div class="position-relative">
-                                                    ${product.image ? 
-                                                        `<img src="${product.image}" class="card-img-top product-image">` : 
-                                                        `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
-                                                            <i class="fas fa-box-open fa-3x text-secondary"></i>
-                                                        </div>`}
-                                                    <button class="buy-btn" title="Купить" 
-                                                            onclick="buyProduct('${shop.id}', '${product.name.replace(/'/g, "\\'")}')">
-                                                        <i class="fab fa-whatsapp"></i>
-                                                    </button>
-                                                </div>
-                                                <div class="card-body">
-                                                    <h5 class="card-title">${product.name}</h5>
-                                                    <p class="card-text">${product.description}</p>
-                                                    <div class="d-flex justify-content-between">
-                                                        <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
-                                                        <span>Осталось: ${product.quantity} шт.</span>
+                                    querySnapshot.forEach(doc => {
+                                        const product = {
+                                            id: doc.id,
+                                            ...doc.data()
+                                        };
+                                        
+                                        const productCard = `
+                                            <div class="col-md-4 mb-4">
+                                                <div class="card h-100">
+                                                    <div class="position-relative">
+                                                        ${product.image ? 
+                                                            `<img src="${product.image}" class="card-img-top product-image">` : 
+                                                            `<div class="bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
+                                                                <i class="fas fa-box-open fa-3x text-secondary"></i>
+                                                            </div>`}
+                                                        <button class="buy-btn" title="Купить" 
+                                                                onclick="buyProduct('${shop.id}', '${product.name.replace(/'/g, "\\'")}')">
+                                                            <i class="fab fa-whatsapp"></i>
+                                                        </button>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <h5 class="card-title">${product.name}</h5>
+                                                        <p class="card-text">${product.description}</p>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span class="fw-bold">${product.price ? product.price + '₸' : 'Цена не указана'}</span>
+                                                            <span>Осталось: ${product.quantity} шт.</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    `;
-                                    
-                                    shopProducts.innerHTML += productCard;
+                                        `;
+                                        
+                                        shopProducts.innerHTML += productCard;
+                                    });
                                 });
-                            });
+                        });
                     } else {
                         alert('Магазин не найден');
-                        showSection('home');
+                        location.hash = '#/';
                     }
                 })
                 .then(() => {
@@ -860,13 +933,12 @@
                 .catch(error => {
                     console.error("Ошибка загрузки магазина:", error);
                     alert('Ошибка загрузки магазина');
-                    showSection('home');
+                    location.hash = '#/';
                 });
         }
 
         // Купить товар
         function buyProduct(shopId, productName) {
-            // Получаем магазин по ID, чтобы взять номер владельца
             db.collection('shops').doc(shopId).get()
                 .then(shopDoc => {
                     if (shopDoc.exists) {
@@ -905,24 +977,54 @@
             }
         }
 
+        // Маршрутизатор
+        function router() {
+            const hash = window.location.hash.substring(1);
+            const parts = hash.split('/');
+            
+            // Скрыть все секции
+            Object.values(sections).forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Показать нужную секцию
+            if (parts[0] === '') {
+                sections.home.classList.add('active');
+            } 
+            else if (parts[0] === 'register') {
+                sections.register.classList.add('active');
+            } 
+            else if (parts[0] === 'login') {
+                sections.login.classList.add('active');
+            } 
+            else if (parts[0] === 'dashboard') {
+                if (currentUser) {
+                    sections.dashboard.classList.add('active');
+                    loadUserShop();
+                } else {
+                    location.hash = '#/login';
+                }
+            } 
+            else if (parts[0] === 'shop' && parts[1]) {
+                const shopSlug = parts[1];
+                loadShopBySlug(shopSlug);
+            } 
+            else {
+                sections.home.classList.add('active');
+            }
+        }
+
         // Инициализация приложения
         function init() {
-            // Проверка параметра shop в URL
-            const urlParams = new URLSearchParams(window.location.search);
-            const shopId = urlParams.get('shop');
+            // Обработчики событий
+            window.addEventListener('hashchange', router);
+            document.getElementById('logoutBtn').addEventListener('click', logout);
             
-            // Проверка авторизации пользователя
+            // Проверка авторизации
             auth.onAuthStateChanged(user => {
                 currentUser = user;
                 updateAuthUI();
-                
-                if (shopId && !currentUser) {
-                    showShop(shopId);
-                } else if (currentUser) {
-                    showSection('dashboard');
-                } else {
-                    showSection('home');
-                }
+                router();
             });
         }
 
@@ -933,6 +1035,7 @@
         window.buyProduct = buyProduct;
         window.editProduct = editProduct;
         window.copyShopUrl = copyShopUrl;
+        window.generateRandomSlug = generateRandomSlug;
     </script>
 </body>
 </html>
