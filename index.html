@@ -977,29 +977,32 @@
             }
         }
 
+        // Показать секцию
+        function showSection(sectionName) {
+            Object.values(sections).forEach(section => {
+                section.classList.remove('active');
+            });
+            sections[sectionName].classList.add('active');
+        }
+
         // Маршрутизатор
         function router() {
             const hash = window.location.hash.substring(1);
             const parts = hash.split('/');
             
-            // Скрыть все секции
-            Object.values(sections).forEach(section => {
-                section.classList.remove('active');
-            });
-            
             // Показать нужную секцию
             if (parts[0] === '') {
-                sections.home.classList.add('active');
+                showSection('home');
             } 
             else if (parts[0] === 'register') {
-                sections.register.classList.add('active');
+                showSection('register');
             } 
             else if (parts[0] === 'login') {
-                sections.login.classList.add('active');
+                showSection('login');
             } 
             else if (parts[0] === 'dashboard') {
                 if (currentUser) {
-                    sections.dashboard.classList.add('active');
+                    showSection('dashboard');
                     loadUserShop();
                 } else {
                     location.hash = '#/login';
@@ -1010,32 +1013,34 @@
                 loadShopBySlug(shopSlug);
             } 
             else {
-                sections.home.classList.add('active');
+                showSection('home');
             }
         }
 
         // Инициализация приложения
         function init() {
-            // Обработчики событий
-            window.addEventListener('hashchange', router);
-            document.getElementById('logoutBtn').addEventListener('click', logout);
-            
             // Проверка авторизации
             auth.onAuthStateChanged(user => {
                 currentUser = user;
                 updateAuthUI();
                 router();
             });
+            
+            // Обработчики событий
+            window.addEventListener('hashchange', router);
+            document.getElementById('logoutBtn').addEventListener('click', logout);
         }
 
         // Запуск приложения
-        init();
-        
-        // Экспорт функций в глобальную область видимости
-        window.buyProduct = buyProduct;
-        window.editProduct = editProduct;
-        window.copyShopUrl = copyShopUrl;
-        window.generateRandomSlug = generateRandomSlug;
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+            
+            // Экспорт функций в глобальную область видимости
+            window.buyProduct = buyProduct;
+            window.editProduct = editProduct;
+            window.copyShopUrl = copyShopUrl;
+            window.generateRandomSlug = generateRandomSlug;
+        });
     </script>
 </body>
 </html>
