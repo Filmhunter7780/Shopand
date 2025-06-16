@@ -277,7 +277,7 @@
                     this.updateAuthUI();
                     
                     const shopId = new URLSearchParams(window.location.search).get('shop');
-                    if (shopId && !user) {
+                    if (shopId) {
                         this.showShop(shopId);
                     } else {
                         this.showSection(user ? 'dashboard' : 'home');
@@ -534,8 +534,6 @@
             },
 
             async showShop(shopId) {
-                if (this.currentUser) return this.showSection('dashboard');
-                
                 try {
                     const doc = await db.collection('shops').doc(shopId).get();
                     if (!doc.exists) return this.showError('Магазин не найден');
@@ -670,11 +668,11 @@
             },
 
             showError(message) {
-                alert(message); // В продакшене лучше использовать toast/modal
+                alert(message);
             },
 
             showSuccess(message) {
-                alert(message); // В продакшене лучше использовать toast/modal
+                alert(message);
             }
         };
 
