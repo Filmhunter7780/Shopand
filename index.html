@@ -204,7 +204,7 @@
                             <div class="short-url-container">
                                 <div class="url-title">Сокращенная ссылка:</div>
                                 <a href="#" id="shopShortUrl" target="_blank" class="short-url"></a>
-                                <span id="shortUrlBadge" class="url-badge">Cutt.ly</span>
+                                <span id="shortUrlBadge" class="url-badge">Firebase</span>
                                 <i class="fas fa-copy copy-btn" title="Скопировать сокращенную ссылку" onclick="App.copyShopShortUrl()"></i>
                                 <span id="shortUrlSpinner" class="url-spinner d-none"></span>
                             </div>
@@ -303,6 +303,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-dynamic-links-compat.js"></script>
     
     <script>
         const firebaseConfig = {
@@ -317,15 +318,14 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
+        const dynamicLinks = firebase.dynamicLinks();
 
         const App = {
             currentUser: null,
             currentShop: null,
             editingProductId: null,
+            DYNAMIC_LINK_DOMAIN: "shopand.page.link", // Замените на ваш домен Firebase Dynamic Links
             
-            // Ваш API ключ для Cutt.ly
-            CUTTLY_API_KEY: "25fb1138fc7891bd36f84c965c3946867e61c",
-
             init() {
                 this.bindEvents();
                 
@@ -508,47 +508,62 @@
                 } else {
                     shortUrlElement.textContent = "Генерируем сокращенную ссылку...";
                     document.getElementById('shortUrlSpinner').classList.remove('d-none');
-                    this.generateShortUrl(shopUrl);
+                    this.generateDynamicLink(shopUrl);
                 }
                 
                 this.toggleElements(['noShopInfo'], ['shopInfo']);
             },
             
-            // Генерация сокращенной ссылки через Cutt.ly
-            async generateShortUrl(longUrl) {
+            // Генерация динамической ссылки
+            async generateDynamicLink(longUrl) {
                 const spinner = document.getElementById('shortUrlSpinner');
                 const shortUrlElement = document.getElementById('shopShortUrl');
+                const shortUrlBadge = document.getElementById('shortUrlBadge');
                 
                 try {
-                    const apiUrl = `https://cutt.ly/api/api.php?key=${this.CUTTLY_API_KEY}&short=${encodeURIComponent(longUrl)}`;
-                    
-                    const response = await fetch(apiUrl);
-                    const data = await response.json();
-                    
-                    if (data.url && data.url.status === 7) {
-                        const shortUrl = data.url.shortLink;
-                        
-                        // Сохраняем сокращенную ссылку в Firestore
-                        await db.collection('shops').doc(this.currentShop.id).update({
-                            shortUrl: shortUrl
-                        });
-                        
-                        // Обновляем текущий магазин
-                        this.currentShop.shortUrl = shortUrl;
-                        
-                        // Обновляем интерфейс
-                        shortUrlElement.textContent = shortUrl;
-                        shortUrlElement.href = shortUrl;
-                        spinner.classList.add('d-none');
-                        
-                        return shortUrl;
-                    } else {
-                        const errorMsg = data.url ? `Ошибка API: ${data.url.status}` : "Неизвестная ошибка";
-                        throw new Error(errorMsg);
+                    // Проверяем, что URL действителен
+                    if (!longUrl || !longUrl.startsWith('http')) {
+                        throw new Error('Неверный формат ссылки магазина');
                     }
+
+                    // Создаем динамическую ссылку
+                    const link = await dynamicLinks.createShortLink({
+                        link: longUrl,
+                        domainUriPrefix: `https://${this.DYNAMIC_LINK_DOMAIN}`,
+                        androidInfo: {
+                            androidPackageName: "com.example.app", // Замените на ваш пакет
+                            androidFallbackLink: longUrl
+                        },
+                        iosInfo: {
+                            iosBundleId: "com.example.app", // Замените на ваш бандл
+                            iosFallbackLink: longUrl
+                        },
+                        navigationInfo: {
+                            enableForcedRedirect: false
+                        }
+                    });
+
+                    const shortUrl = link.shortLink;
+                    
+                    // Сохраняем сокращенную ссылку в Firestore
+                    await db.collection('shops').doc(this.currentShop.id).update({
+                        shortUrl: shortUrl
+                    });
+                    
+                    // Обновляем текущий магазин
+                    this.currentShop.shortUrl = shortUrl;
+                    
+                    // Обновляем интерфейс
+                    shortUrlElement.textContent = shortUrl;
+                    shortUrlElement.href = shortUrl;
+                    spinner.classList.add('d-none');
+                    
+                    return shortUrl;
                 } catch (error) {
-                    console.error('Ошибка при сокращении ссылки:', error);
-                    shortUrlElement.textContent = "Ошибка генерации";
+                    console.error('Ошибка при создании динамической ссылки:', error);
+                    shortUrlElement.textContent = "Используйте основную ссылку";
+                    shortUrlBadge.textContent = "Ошибка";
+                    shortUrlBadge.style.color = "red";
                     spinner.classList.add('d-none');
                     return null;
                 }
