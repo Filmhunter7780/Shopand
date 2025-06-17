@@ -26,46 +26,6 @@
         .price-input::-webkit-outer-spin-button,.price-input::-webkit-inner-spin-button{appearance:none;margin:0}
         .disabled{opacity:.65!important;pointer-events:none}
         .placeholder-img{height:150px;background:#f8f9fa;display:flex;align-items:center;justify-content:center}
-        
-        /* Стили для ссылок */
-        .url-container {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .url-title {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-        .short-url-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 8px;
-        }
-        .short-url {
-            color: var(--primary);
-            word-break: break-all;
-        }
-        .url-badge {
-            background-color: #e9ecef;
-            border-radius: 4px;
-            padding: 2px 8px;
-            font-size: 0.85em;
-        }
-        .url-spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(0,0,0,.1);
-            border-radius: 50%;
-            border-top-color: var(--primary);
-            animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -192,25 +152,11 @@
                     <div id="shopInfo" class="d-none">
                         <h4 id="shopNameDisplay"></h4>
                         <p id="shopDescriptionDisplay"></p>
-                        
-                        <!-- Контейнер для ссылок -->
-                        <div class="url-container">
-                            <div class="url-title">Основная ссылка магазина:</div>
-                            <div>
-                                <a href="#" id="shopUrl" target="_blank" class="long-url"></a>
-                                <i class="fas fa-copy copy-btn" title="Скопировать ссылку" onclick="App.copyShopUrl()"></i>
-                            </div>
-                            
-                            <div class="short-url-container">
-                                <div class="url-title">Сокращенная ссылка:</div>
-                                <a href="#" id="shopShortUrl" target="_blank" class="short-url"></a>
-                                <span id="shortUrlBadge" class="url-badge">Firebase</span>
-                                <i class="fas fa-copy copy-btn" title="Скопировать сокращенную ссылку" onclick="App.copyShopShortUrl()"></i>
-                                <span id="shortUrlSpinner" class="url-spinner d-none"></span>
-                            </div>
-                        </div>
-                        
-                        <button onclick="App.toggleShopForm()" class="btn btn-outline-primary mt-3">Редактировать магазин</button>
+                        <p><strong>URL вашего магазина:</strong> 
+                            <a href="#" id="shopUrl" target="_blank"></a>
+                            <i class="fas fa-copy copy-btn" title="Скопировать ссылку" onclick="App.copyShopUrl()"></i>
+                        </p>
+                        <button onclick="App.toggleShopForm()" class="btn btn-outline-primary">Редактировать магазин</button>
                     </div>
                     <div id="noShopInfo" class="d-none">
                         <p class="text-muted">У вас еще нет магазина</p>
@@ -303,7 +249,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.2/firebase-dynamic-links-compat.js"></script>
     
     <script>
         const firebaseConfig = {
@@ -318,14 +263,12 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const dynamicLinks = firebase.dynamicLinks();
 
         const App = {
             currentUser: null,
             currentShop: null,
             editingProductId: null,
-            DYNAMIC_LINK_DOMAIN: "shopand.page.link", // Замените на ваш домен Firebase Dynamic Links
-            
+
             init() {
                 this.bindEvents();
                 
@@ -499,84 +442,7 @@
                 urlElement.textContent = shopUrl;
                 urlElement.href = shopUrl;
                 
-                // Отображение сокращенной ссылки
-                const shortUrlElement = document.getElementById('shopShortUrl');
-                if (this.currentShop.shortUrl) {
-                    shortUrlElement.textContent = this.currentShop.shortUrl;
-                    shortUrlElement.href = this.currentShop.shortUrl;
-                    document.getElementById('shortUrlSpinner').classList.add('d-none');
-                } else {
-                    shortUrlElement.textContent = "Генерируем сокращенную ссылку...";
-                    document.getElementById('shortUrlSpinner').classList.remove('d-none');
-                    this.generateDynamicLink(shopUrl);
-                }
-                
                 this.toggleElements(['noShopInfo'], ['shopInfo']);
-            },
-            
-            // Генерация динамической ссылки
-            async generateDynamicLink(longUrl) {
-                const spinner = document.getElementById('shortUrlSpinner');
-                const shortUrlElement = document.getElementById('shopShortUrl');
-                const shortUrlBadge = document.getElementById('shortUrlBadge');
-                
-                try {
-                    // Проверяем, что URL действителен
-                    if (!longUrl || !longUrl.startsWith('http')) {
-                        throw new Error('Неверный формат ссылки магазина');
-                    }
-
-                    // Создаем динамическую ссылку
-                    const link = await dynamicLinks.createShortLink({
-                        link: longUrl,
-                        domainUriPrefix: `https://${this.DYNAMIC_LINK_DOMAIN}`,
-                        androidInfo: {
-                            androidPackageName: "com.example.app", // Замените на ваш пакет
-                            androidFallbackLink: longUrl
-                        },
-                        iosInfo: {
-                            iosBundleId: "com.example.app", // Замените на ваш бандл
-                            iosFallbackLink: longUrl
-                        },
-                        navigationInfo: {
-                            enableForcedRedirect: false
-                        }
-                    });
-
-                    const shortUrl = link.shortLink;
-                    
-                    // Сохраняем сокращенную ссылку в Firestore
-                    await db.collection('shops').doc(this.currentShop.id).update({
-                        shortUrl: shortUrl
-                    });
-                    
-                    // Обновляем текущий магазин
-                    this.currentShop.shortUrl = shortUrl;
-                    
-                    // Обновляем интерфейс
-                    shortUrlElement.textContent = shortUrl;
-                    shortUrlElement.href = shortUrl;
-                    spinner.classList.add('d-none');
-                    
-                    return shortUrl;
-                } catch (error) {
-                    console.error('Ошибка при создании динамической ссылки:', error);
-                    shortUrlElement.textContent = "Используйте основную ссылку";
-                    shortUrlBadge.textContent = "Ошибка";
-                    shortUrlBadge.style.color = "red";
-                    spinner.classList.add('d-none');
-                    return null;
-                }
-            },
-            
-            // Копирование сокращенной ссылки
-            copyShopShortUrl() {
-                if (!this.currentShop?.shortUrl) return;
-                
-                const shortUrl = this.currentShop.shortUrl;
-                navigator.clipboard.writeText(shortUrl)
-                    .then(() => this.showSuccess('Сокращенная ссылка скопирована!'))
-                    .catch(() => this.showError('Ошибка копирования'));
             },
 
             copyShopUrl() {
@@ -817,3 +683,7 @@
     </script>
 </body>
 </html>
+
+вот мой код, там есть ссылки на магазины которые создаёт продавец при создании магазина, вот эти ссылки нужно сократить через сервис cutt ly 
+мой апи 25fb1138fc7891bd36f84c965c3946867e61c
+сделай основную ссылки и внизу сокращенную что б было понятно 
